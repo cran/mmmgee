@@ -67,11 +67,10 @@
 #'	If only \code{C} is specified, \code{r} is assumed as null vector. The functionality is in particular required to calculate the generalized score test for linear hypotheses about
 #'	\eqn{\beta}. Use \code{conv.criterion="difference"} if any regression coefficient is restricted to 0.
 #'
-#' @note The option to fit a model with restrictions concerning the coefficients is implemented to enable the calculation of a generalized score test.
-#'	It may also be used to obtain estimates of the coefficients under restrictions, but note that currently the calculation of the covariance matrix is not adapted and the 
-#'	covariance matrix and standard errors in the output are not valid estimates of the actual quantities.
-#'	(The underlying series expansion is incorrect in the restricted model as the score vector is in general not zero at the location of
-#'	the restricted parameter estimates.)
+#' @note The option to fit a model with linear restrictions concerning the coefficients is implemented to enable the calculation of a generalized score test.
+#'	It may also be used to obtain estimates of the coefficients under restrictions. The model based and robust variance estimates of the restricted 
+#'	coefficient estimates are found in the slots \code{restricted.naiv.var} and \code{restricted.var}, respectively. Note that the variance of estimates restricted to a single value
+#'	is supposed to be zero, however the calculated variance estimate may deviate from zero within machine accuracy.
 #'
 #' @return A list with class \code{geem2}, similar to the output
 #' 	of \code{geem} from the geeM package. The additional slot \code{sandwich.args} contains components to calculate the sandwich variance estimator for the
@@ -592,15 +591,37 @@ geem2 <- function (formula, id, waves = NULL, data = parent.frame(), family = ga
     results$biggest.R.alpha <- biggest.R.alpha/phi
     results$formula <- formula
 
-    ####Additional output required for the multiple marginal models sandwich estimation
+    ####Additional output required for the multiple marginal models sandwich estimation (B is not required but was included in earlier versions).
+	if(sandwich) {
+		B<-sandvar.list$numsand
+	} else {
+		B<-"no sandwich"
+	}
     results$sandw.args<-list(Y=Y.namod, X=X.namod, eta=eta, id=id, R.alpha.inv=R.alpha.inv, 
             phi=phi, InvLinkDeriv=InvLinkDeriv, InvLink=InvLink, VarFun=VarFun, hess=beta.list$hess, 
             StdErr=StdErr, dInvLinkdEta=dInvLinkdEta, BlockDiag=BlockDiag, sqrtW=sqrtW, len=len,
-            B=sandvar.list$numsand, score=beta.list$esteq)
+            B=B,score=beta.list$esteq)
 		#included=included,includedlen=includedlen,len=len,n.vec=n.vec) #added by Robin, redundancies: results$clusz<-len,  results$eta <- eta
 
     #Modification: The input restriction should be contained in the output, so we can see from the model object, if the model was fit under some restriction.
     results$restriction<-restriction
+    #Modification: In case of restricted estimation, include variance estimate of restricted coefficient estiamtes in output.
+    if(!is.null(restriction)) {
+	A<-results$naiv.var
+	L<-restriction[[1]]
+	Id<-diag(1,dim(A)[1])
+	MM<-Id-A%*%t(L)%*%solve(L%*%A%*%t(L),L)
+	#MMa<-A-A%*%t(L)%*%solve(L%*%A%*%t(L))%*%L%*%A
+	Vtildenaiv<-MM%*%A%*%t(MM)
+	results$restricted.naiv.var<-forceSymmetric(Vtildenaiv, uplo="U")
+	#results$testvar<-MMa%*%sandvar.list$numsand%*%MMa
+	if(sandwich) {
+		Vtilde<-MM%*%results$var%*%t(MM)
+		results$restricted.var<-forceSymmetric(Vtilde, uplo="U")
+	} else {
+		results$restricted.var<-"no sandwich"
+	}
+    }
 
     class(results) <- "geem2"
     return(results)
@@ -1055,6 +1076,9 @@ print.summary.geem2 <- function (x, ...)
     Coefs[, 4] <- x$wald.test
     Coefs[, 5] <- x$p
     print(signif(Coefs, digits = 4))
+    if(x$restriction) {
+        cat("\n Restricted estimates and their standard errors were calculated.\n")
+    }
     if (!is.element(x$corr, c("independence", "ar1", "exchangeable"))) {
         if (dim(x$biggest.R.alpha)[1] > 4) {
             cat("\n Working Correlation[1:4,1:4]: \n")
@@ -1086,16 +1110,29 @@ summary.geem2 <- function (object, ...)
     Coefs <- matrix(NA, nrow = length(object$beta), ncol = 5)
     Coefs[, 1] <- c(object$beta)
     naive <- is.character(object$var)
+    #Modification:
+    restriction <- !is.null(object$restriction)
     if (!naive && any(diag(object$var) < 0)) {
         naive <- TRUE
         warning("Some elements of robust variance estimate < 0.  Reporting model based SE.")
     }
-    Coefs[, 2] <- sqrt(diag(object$naiv.var))
-    if (naive) {
-        Coefs[, 3] <- rep(NA, length(object$beta))
-    }
-    else {
-        Coefs[, 3] <- sqrt(diag(object$var))
+
+    if(!restriction) {	
+        Coefs[, 2] <- sqrt(diag(object$naiv.var))
+        if (naive) {
+            Coefs[, 3] <- rep(NA, length(object$beta))
+        }
+        else {
+            Coefs[, 3] <- sqrt(diag(object$var))
+        }
+    } else {
+        Coefs[, 2] <- sqrt(diag(object$restricted.naiv.var))
+        if (naive) {
+            Coefs[, 3] <- rep(NA, length(object$beta))
+        }
+        else {
+            Coefs[, 3] <- sqrt(diag(object$restricted.var))
+        }
     }
     if (naive) {
         Coefs[, 4] <- Coefs[, 1]/Coefs[, 2]
@@ -1111,7 +1148,7 @@ summary.geem2 <- function (object, ...)
         3], wald.test = Coefs[, 4], p = Coefs[, 5], alpha = object$alpha, 
         corr = object$corr, phi = object$phi, niter = object$niter, 
         clusz = object$clusz, coefnames = object$coefnames, weights = object$weights, 
-        biggest.R.alpha = object$biggest.R.alpha)
+        biggest.R.alpha = object$biggest.R.alpha,restriction=restriction)
     class(summ) <- "summary.geem2"
     return(summ)
 }
@@ -1323,12 +1360,13 @@ getW<-function(x,biascorr=FALSE) {
 		for(i in 1:K) Xcluster[[i]]<-x$sandw.arg$X[(startstop[i]+1):startstop[i+1],,drop=FALSE] #wenn man eine Zeile herausholt, wird es als sonst Spaltenvektor interpretiert
 		Xdiag<-bdiag(Xcluster)
 
-		hessInv<-solve(x$sandw.args$hess)
+		hessInv<-x$naiv.var #solve(x$sandw.args$hess)
 				
 		#Bias Korrektur bei restringierter Schaetzung, der slot restriction enthaelt L und r, wenn es eine Restriktion gibt, sonst ist er NULL
-		#x$restricion[[1]] ist L, x$restricion[[2]] ist r
-		if(!is.null(x$restricion)) {
-			hessInvAdj<-hessInv-hessInv%*%t(x$restricion[[1]])%*%solve(x$restricion[[1]]%*%hessInv%*%t(x$restricion[[1]]))%*%x$restricion[[1]]%*%hessInv
+		#x$restriction[[1]] ist L, x$restriction[[2]] ist r
+		if(!is.null(x$restriction)) {
+			#hessInvAdj<-hessInv-hessInv%*%t(x$restriction[[1]])%*%solve(x$restriction[[1]]%*%hessInv%*%t(x$restriction[[1]]))%*%x$restriction[[1]]%*%hessInv
+			hessInvAdj<-hessInv-hessInv%*%t(x$restriction[[1]])%*%solve(x$restriction[[1]]%*%hessInv%*%t(x$restriction[[1]]),x$restriction[[1]]%*%hessInv)
 			hessKronecker<-Diagonal(n=K,x=1)%x%hessInvAdj
 		} else {
 			#hessKronecker<-diag(1,K)%x%hessInv
@@ -1341,7 +1379,9 @@ getW<-function(x,biascorr=FALSE) {
 		#einfacher:
 		H<-x$sandw.arg$dInvLinkdEta%*%Xdiag%*%hessKronecker%*%t(Xdiag)%*%W
 		I_n<-Diagonal(n=length(x$sandw.arg$id),x=1)
-		W<-W%*%solve(I_n - H)
+		#W<-W%*%solve(I_n - H)
+		#gleichwertig, im Test nicht unbedingt schneller
+		W<-t(solve(t(I_n - H),t(W)))
 	}
 	W
 }
@@ -1354,6 +1394,8 @@ getSdiag<-function(x) {
 getID<-function(x) x$sandw.args$id
 
 getHess<-function(x) x$sandw.args$hess
+
+getHessInv<-function(x) x$naiv.var
 
 
 #' @title Covariance Matrix Estimation for Multiple Marginal GEE Models
@@ -1406,8 +1448,9 @@ mmmgee<-function(x,biascorr=FALSE) {
 	#B<-t(X.stack)%*%W.stack%*%S.stack%*%BD.stack%*%S.stack%*%t(W.stack)%*%X.stack
 
 	#Sandwich, aeusserer Teil
-	Hess.stack<-bdiag(lapply(x,getHess))
-	A<-solve(Hess.stack)
+	#Hess.stack<-bdiag(lapply(x,getHess))
+	#A<-solve(Hess.stack)
+	A<-bdiag(lapply(x,getHessInv))
 
 	#ganzes Sandwich
 	V<-A%*%B%*%A
@@ -1434,8 +1477,8 @@ mmmgee<-function(x,biascorr=FALSE) {
 
 
 #Notwendige Funktionen zur Anwendung von multcomp glht
-vcov.mmmgee<-function(x) x$V
-coef.mmmgee<-function(x) x$beta
+vcov.mmmgee<-function(x,...) x$V
+coef.mmmgee<-function(x,...) x$beta
 
 
 getZeror<-function(L) rep(0,dim(L)[1])
@@ -1460,7 +1503,8 @@ mmmscore.test<-function(Modelle,L.list,r.list=NULL,tol=10^(-8),type="quadratic",
 	#Quadratic form Score Test
 	#For the robust Score Test Statistic, see e.g. D. Boos 1992, On Generalized Score Tests, The American Statistician: Vol 46, No 4
 	if(type=="quadratic") {
-		T<-as.numeric( t(score) %*% MMM$A%*%t(L)%*%solve( L%*%MMM$V%*%t(L) )%*%L%*%MMM$A %*% score )
+		#T<-as.numeric( t(score) %*% MMM$A%*%t(L)%*%solve( L%*%MMM$V%*%t(L) )%*%L%*%MMM$A %*% score )
+		T<-as.numeric( t(score) %*% MMM$A%*%t(L)%*%solve( L%*%MMM$V%*%t(L),L%*%MMM$A %*% score ) )
 		p<-1-pchisq(T,df=df) #The rank of L is checked in the geem function.
 		retval<-list(test=data.frame(Chisq=T,df=df,p=p),restricted.coef=MMM$beta,score=score,type=type)	
 	}
@@ -1501,7 +1545,7 @@ mmmscore.test<-function(Modelle,L.list,r.list=NULL,tol=10^(-8),type="quadratic",
 #df numeric
 mmmchisq.test.simple<-function(x,L,r=NULL,approximation=c("Chisq","F","scaled.F"),df2=NA) {
 	approximation<-match.arg(approximation,choices=c("Chisq","F","scaled.F"))
-	T<-as.numeric( t(L%*%x$beta-r)%*%solve(L%*%x$V%*%t(L))%*%(L%*%x$beta-r) )
+	T<-as.numeric( t(L%*%x$beta-r)%*%solve(L%*%x$V%*%t(L),L%*%x$beta-r) )
 	df1<-dim(L)[1]
 	if(approximation=="Chisq") {
 		p<-1-pchisq(T,df=df1) #The rank of L is checked in the geem function.
