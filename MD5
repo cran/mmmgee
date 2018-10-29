@@ -1,9 +1,9 @@
-d36c410b585314a218f1ec83f25b0f53 *DESCRIPTION
+822162edd9777447f2234f85d4512929 *DESCRIPTION
 32c27aaf076361d30ffae0511dd07b7a *NAMESPACE
-a038e280663d35f4fb0fb59f23d44445 *R/Hypothesentest_funktion_verbessert_2-0Feb2018.R
-4cb80bb7d56400aca429f7e6c73b90d9 *R/Paket_alle_Funktionen_Basis_v01_1-9Juli2018.R
-7ab25266abf16a7a709e2687105fb5c5 *data/lesions.RData
-bda92e20dc7601427c6ef0d51e354703 *man/geem2.Rd
-494cf7785d9e9ac7b8e01c413f12a8b1 *man/lesions.Rd
-b5c4edd81cfa5773702d525ba090a4f8 *man/mmmgee.Rd
-b6fdbc92512ae1f007729eff562a023d *man/mmmgee.test.Rd
+2285ec893467c5244acbbeae1ac47478 *R/Hypothesentest_funktion_verbessert_2-1Okt2018.R
+3b0db5aa8e865a28eab076cc4402ebf6 *R/Paket_alle_Funktionen_Basis_v01_2-0Okt2018.R
+c938be58d13271b0ea85dfafec3caa78 *data/keratosis.RData
+7db39cddc21b30d00aabef7a998b001d *man/geem2.Rd
+6344d1ec0fbe59a1d688a657d5d93d7e *man/keratosis.Rd
+3cf010d50f403cf1e85721bdbf68d881 *man/mmmgee.Rd
+aae4a341b597382836721f6c71837191 *man/mmmgee.test.Rd

@@ -76,9 +76,9 @@
 #' @seealso \code{\link{geem2}}, \code{\link{mmmgee}}
 #'
 #' @examples
-#' data(lesions)
-#' m1<-geem2(clearance~trt,id=id,data=lesions,family=binomial,corstr="independence")
-#' m2<-geem2(pain~trt,id=id,data=lesions[lesions$lesion==1,],family=gaussian,corstr="independence")
+#' data(keratosis)
+#' m1<-geem2(clearance~trt,id=id,data=keratosis,family=binomial,corstr="independence")
+#' m2<-geem2(pain~trt,id=id,data=keratosis[keratosis$lesion==1,],family=gaussian,corstr="independence")
 #' L1<-L2<-diag(1,4)[-1,]
 #' mmmgee.test(x=m1,L=list(L1),statistic="wald",type="maximum")
 #' mmmgee.test(x=m1,L=list(L1),statistic="score",type="maximum")

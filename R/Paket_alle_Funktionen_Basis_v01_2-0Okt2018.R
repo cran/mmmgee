@@ -82,12 +82,12 @@
 #' @seealso \code{\link{mmmgee}}, \code{\link[geeM]{geem}}, \code{\link{mmmgee.test}}
 #'
 #' @examples
-#' data(lesions)
-#' m1<-geem2(clearance~trt,id=id,data=lesions,family=binomial,corstr="independence")
+#' data(keratosis)
+#' m1<-geem2(clearance~trt,id=id,data=keratosis,family=binomial,corstr="independence")
 #' summary(m1)
-#' m2<-geem2(pain~trt,id=id,data=lesions[lesions$lesion==1,],family=gaussian,corstr="independence")
+#' m2<-geem2(pain~trt,id=id,data=keratosis[keratosis$lesion==1,],family=gaussian,corstr="independence")
 #' summary(m2)
-#' geem2(pain~trt,id=id,data=lesions[lesions$lesion==1,],family=gaussian,corstr="exchangeable")
+#' geem2(pain~trt,id=id,data=keratosis[keratosis$lesion==1,],family=gaussian,corstr="exchangeable")
 #'
 #'
 #' @export
@@ -1421,9 +1421,9 @@ getHessInv<-function(x) x$naiv.var
 #'	
 #' @seealso \code{\link{geem2}}, \code{\link{mmmgee.test}}
 #' @examples
-#' data(lesions)
-#' m1<-geem2(clearance~trt,id=id,data=lesions,family=binomial,corstr="independence")
-#' m2<-geem2(pain~trt,id=id,data=lesions[lesions$lesion==1,],family=gaussian,corstr="independence")
+#' data(keratosis)
+#' m1<-geem2(clearance~trt,id=id,data=keratosis,family=binomial,corstr="independence")
+#' m2<-geem2(pain~trt,id=id,data=keratosis[keratosis$lesion==1,],family=gaussian,corstr="independence")
 #' mmmgee(x=list(m1,m2),biascorr=TRUE)
 #'
 #' @export
@@ -1611,16 +1611,16 @@ mmmmax.test.simple<-function(x,L,r,alternative="undirected",approximation="norma
 #'
 #' @docType data
 #'
-#' @usage data(lesions)
+#' @usage data(keratosis)
 #'
 #' @format A data frame.
 #'
 #' @keywords datasets
 #'
 #' @examples
-#' data(lesions)
-#' head(lesions)
-"lesions"
+#' data(keratosis)
+#' head(keratosis)
+"keratosis"
 
 
 
