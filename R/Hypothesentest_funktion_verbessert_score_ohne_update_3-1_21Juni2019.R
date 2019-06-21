@@ -4,8 +4,10 @@
 #' @param x a \code{geem2} object fitted with \code{geem2} or a list of \code{geem2}. In the latter case, the \code{geem2} objects must be different
 #'	models calculated with data from the same subjects. In particular, the parameter \code{id} in the call to \code{geem2} must refer to the same subjects in each model. 
 #' @param L a contrast matrix defining a contrast for the stacked vector of regression coefficients of the marginal models, or a list of contrast matrices.
-#'	In the latter case, the list must contain one matrix for each model listed in \code{x}, in the same order as the models. When using the the score test \code{x} must it be a list.
-#' @param r right hand side vector of the null hypothesis or a list of vectors resembling the right hand side of the null hypothesis. If not specified \code{r=0} is assumed. See details.
+#'	In the latter case, the list must contain one matrix for each model listed in \code{x}, in the same order as the models. When using the the score test 
+#'	and \code{x} is a list, \code{L} must be a list.
+#' @param r right hand side vector of the null hypothesis or a list of vectors resembling the right hand side of the null hypothesis. If not specified, \code{r} is assumed to be a null vector 
+#'	of appropriate length. See details.
 #' @param statistic either \code{"wald"} or \code{"score"}, see details. The default is \code{"wald"}.
 #' @param type either \code{"maximum"} or \code{"quadratic"}, see details. The default is \code{"maximum"}.
 #' @param asymptotic logical, if \code{TRUE} the reference distribution for the maximum-type Wald test statistic is a multivariate normal distribution and the reference distribution for 
@@ -23,6 +25,8 @@
 #'	where \code{n} and \code{p} are vectors of the number of independent clusters and the number of regression coefficients in the models in \code{x}.
 #'	Alternatively, a numeric value may be entered to be used as denominator degrees of freedom. 
 #' @param scaled.F logical. If \code{TRUE} and \code{type="quadratic"} and \code{asymptotic=FALSE} a scaled F distribution similar as for Hotelling's test is used. Ignored otherwise.
+#' @param maxit maximal number of iterations to be passed to \code{\link{geem2}}. Only required when using the score test, where the models are refitted under the
+#' 	restriction of the null hyptothesis.
 #' @param tol tolerance limit for the convergence criterion to be passed to \code{\link{geem2}}. Only required when using the score test, where the models are refitted under the
 #' 	restriction of the null hyptothesis.
 #' @param ... additional arguments that are passed to \code{\link[mvtnorm]{pmvnorm}}, \code{\link[mvtnorm]{qmvnorm}}, \code{\link[mvtnorm]{pmvt}} and \code{\link[mvtnorm]{qmvt}}.
@@ -47,18 +51,13 @@
 #'	Analogous to the Wald statistic, a maximum-type and a quadratic form score test are available. For the score test the option \code{asymptotic} is ignored
 #'	and the reference distribution is multivariate normal or chi-squared.
 #'
-#' @note Calculating the generalized score test requires refitting the models under the constraint of the null hypothesis.
-#'	The function \code{\link[stats]{update}} is used for this task. It will use the function calls as stated in the slot \code{call} of the \code{geem2} objects.
-#'	There is one important point to notice: The function \code{update} will first look for any components of the fitted object in the environment from which it was
-#'	called, which is an internal function of the package.
-#'	Within this internal function the variables 'Modelle', 'L.list', 'r.list', 'tol', 'type', 'alternative' and 'biascorr' are used. If any component of the model
-#'	object happens to have one of these names, (e.g. if your data frame is called 'tol'), \code{update} will erronously try to use the internal object of that name.
-#'
-#'	A single value for the denominator degrees of freedom is calculated for the covariance matrix estiamate across all contrasts. In the close testing procedure,
+#' @note A single value for the denominator degrees of freedom is calculated for the covariance matrix estimate across all contrasts. In the closed testing procedure,
 #'   	this value is used for the degrees of freedom
 #'	associated with the covariance matrix of any subset of contrasts.
 #'
 #'	Usual linear models or generalized linear models can be regarded as special case of GEE models and can be included in the analysis framework.
+#'	Note however that \code{mmmgee.test} always uses the robust sandwich covariance matrix estimate, even if the calculation of the sandwich covariance was suppressed
+#'	in the model objects in \code{x}.
 #'
 #' @return A list with class \code{mmmgeetest} containing the following components, if required:
 #' \describe{
@@ -89,23 +88,34 @@
 #' mmmgee.test(x=list(m1,m2),L=list(L1,L2),type="quadratic",asymptotic=TRUE)
 #' mmmgee.test(x=list(m1,m2),L=list(L1,L2),statistic="score",type="quadratic")
 #' mmmgee.test(x=list(m1,m2),L=list(L1,L2),statistic="score",type="maximum")
+#' #
+#' \dontrun{
+#' data(datasim)
+#' mod1<-geem2(Y.lin~gr.lang+x1,id=id,data=datasim,family="gaussian",corstr="exchangeable")
+#' mod2<-geem2(Y.poi~gr.lang+x2,id=id,data=datasim,family="poisson",corstr="exchangeable")
+#' mod3<-geem2(Y.bin~gr.lang+x3,id=id,data=datasim,family="binomial",corstr="exchangeable")
+#' Li<-matrix(c(0,1,0),nrow=1)
+#' mmmgee.test(list(mod1,mod2,mod3),L=list(Li,Li,Li),statistic="Wald",type="maximum",
+#'		biascorr=TRUE,asymptotic=FALSE,closed.test=TRUE)
+#' mmmgee.test(list(mod1,mod2,mod3),L=list(Li,Li,Li),statistic="score",closed.test=TRUE)
+#' }
 #'
 #' @export
-mmmgee.test<-function(x,L=NULL,r=NULL,statistic=c("wald","score"),type=c("maximum","quadratic"),asymptotic=TRUE,biascorr=FALSE,closed.test=FALSE,conf.int=FALSE,conf.level=0.95,alternative=c("undirected","greater","less"),denomDF=NULL,scaled.F=FALSE,tol=10^(-8),...) {
-	if(is.null(L)) {
-		L<-vector(mode="list",length=length(x))
-		for(i in 1:length(x)) {
-			L[[i]]<-diag(1,length(x[[i]]$beta))
-			rownames(L[[i]])<-paste("model",i,x[[i]]$coefnames,sep="_")
-		}
-	}
+mmmgee.test<-function(x,L,r=NULL,statistic=c("wald","score"),type=c("maximum","quadratic"),asymptotic=TRUE,biascorr=FALSE,closed.test=FALSE,conf.int=FALSE,conf.level=0.95,alternative=c("undirected","greater","less"),denomDF=NULL,scaled.F=FALSE,maxit=20,tol=10^(-8),...) {
 	if(class(x)=="geem2") {
 		x<-list(x)
 	} else {
 		if(!is.list(x)) stop("x must be a geem2 object or a list of geem2 objects.")
 		for(i in 1:length(x)) if(class(x[[i]])!="geem2") stop("x must be a list of geem2 objects fitted with geem2.")
 	}
-
+	#must be after the check on x, since length(x) needs to be applied to x being a list
+	#if(is.null(L)) {
+	#	L<-vector(mode="list",length=length(x))
+	#	for(i in 1:length(x)) {
+	#		L[[i]]<-diag(1,length(x[[i]]$beta))
+	#		rownames(L[[i]])<-paste("model",i,x[[i]]$coefnames,sep="_")
+	#	}
+	#}
 	statistic<-match.arg(tolower(statistic),choices=c("wald","score"))
 	if(statistic=="wald") statistic<-"Wald"
 	if(statistic=="score") statistic<-"Score"
@@ -127,8 +137,14 @@ mmmgee.test<-function(x,L=NULL,r=NULL,statistic=c("wald","score"),type=c("maximu
 	#conf.int<-match.arg(conf.int,c("none","MaxZ","MaxT"))
 	alternative<-match.arg(alternative,c("undirected","greater","less"))
 	if(type=="quadratic" & alternative!="undirected") warning('alternative different from "undirected" is ignored for quadratic form tests.')
-	if(statistic=="Score" & !is.list(L)) stop("L must be a list if using the Score test.")
-	if(statistic=="Score" & !is.null(r)) if(!is.list(r)) stop("r must be a list if using the Score test.")
+	#new: if x contains only one model, arguments L and r do not have to be lists for the score test, but are turned into lists
+	#of length 1 here:
+	if(statistic=="Score" & length(x)==1 & !is.list(L)) L<-list(L)
+	if(statistic=="Score" & length(x)==1 & !is.null(r) & !is.list(r)) r<-list(r)
+	
+	if(statistic=="Score" & !is.list(L)) stop("L must be a list if using the Score test with multiple models.")
+	#This is actually not required:
+	#if(statistic=="Score" & !is.null(r)) if(!is.list(r)) stop("r must be a list if using the Score test with multiple models.")
 
 	if(is.list(L) & is.list(r) & length(L)!=length(r) ) stop("If lists, L and r must be of same length.")
 	if(is.list(L)) LL<-bdiag(L) else LL<-L
@@ -143,9 +159,11 @@ mmmgee.test<-function(x,L=NULL,r=NULL,statistic=c("wald","score"),type=c("maximu
 
 	#check ranks and if L%*%beta=r has a solution
 	rankL<-qr(as.matrix(LL))$rank
-	rankLr<-qr(as.matrix(cbind(LL,rr)))$rank
+	rankLr<-qr(cbind(as.matrix(LL),rr))$rank
 	if(rankL!=rankLr) stop("The system Lbeta = r has no solution.")
-	if(type=="quadratic" & rankL!=dim(LL)[1]) stop("For quadratic form tests the contrast matrix must have full rank.")
+
+	#This is actually not required, if we use a generalized inverse in the chi-square test function:
+	#if(type=="quadratic" & rankL!=dim(LL)[1]) stop("For quadratic form tests the contrast matrix must have full rank.")
 
 	#if(!(denomDF=="minnp" | (is.numeric(denomDF) & denomDF>0) | denomDF=="satt")) stop('denomDF must be one of "minnp", "satt" or a positive number.') 
 	xx<-mmmgee(x,biascorr=biascorr)
@@ -181,12 +199,12 @@ mmmgee.test<-function(x,L=NULL,r=NULL,statistic=c("wald","score"),type=c("maximu
 	
 		
 	if(statistic=="Score") {
-		global<-mmmscore.test(Modelle=x,L.list=L,r.list=r,tol=tol,type=type,alternative=alternative,biascorr=biascorr)
+		global<-mmmscore.test(Modelle=x,L.list=L,r.list=r,maxit=maxit,tol=tol,type=type,alternative=alternative,biascorr=biascorr,showwarning=TRUE,...)
 		Ldims<-sapply(L,function(x) dim(x)[1]) #wird fuer closed test benoetigt
 	}
 	if(statistic=="Wald") {
-		if(type=="maximum") global<-mmmmax.test.simple(x=xx,L=LL,r=rr,alternative=alternative,approximation=approximation,df2=df2)
-		if(type=="quadratic") global<-mmmchisq.test.simple(x=xx,L=LL,r=rr,approximation=approximation,df2=df2)
+		if(type=="maximum") global<-mmmmax.test.simple(x=xx,L=LL,r=rr,alternative=alternative,approximation=approximation,df2=df2,...)
+		if(type=="quadratic") global<-mmmchisq.test.simple(x=xx,L=LL,r=rr,approximation=approximation,df2=df2,showwarning=TRUE)
 	
 		#if(type=="Chisq" | type=="F" | type=="scaled.F") global<-mmmchisq.test.simple(x=xx,L=LL,r=rr,type=type,df2=df2)
 		#if(type=="MaxT") global<-mmmmax.test.simple(x=xx,L=LL,r=rr,df2=df2,alternative=alternative)
@@ -277,7 +295,8 @@ mmmgee.test<-function(x,L=NULL,r=NULL,statistic=c("wald","score"),type=c("maximu
 						}
 					}
 					#L.temp
-					test.intersect<-mmmscore.test(Modelle=x.temp,L.list=L.temp,r.list=r.temp,tol=tol,type=type,alternative=alternative,biascorr=biascorr)
+					#the warning in case of non-full rank LVtL is displayed only for the global test. It is not displayed within the closed test computations.
+					test.intersect<-mmmscore.test(Modelle=x.temp,L.list=L.temp,r.list=r.temp,maxit=maxit,tol=tol,type=type,alternative=alternative,biascorr=biascorr,showwarning=FALSE,...)
 				}
 
 				if(statistic=="Wald") {
@@ -286,8 +305,8 @@ mmmgee.test<-function(x,L=NULL,r=NULL,statistic=c("wald","score"),type=c("maximu
 					#if(type=="Chisq" | type=="F" | type=="scaled.F") test.intersect<-mmmchisq.test.simple(x=xx,L=L.temp,r=r.temp,type=type,df2=df2)
 					#if(type=="MaxT") test.intersect<-mmmmax.test.simple(x=xx,L=L.temp,r=r.temp,df2=df2,alternative=alternative)
 					#if(type=="MaxZ") test.intersect<-mmmmax.test.simple(x=xx,L=L.temp,r=r.temp,df2=NULL,alternative=alternative)
-					if(type=="maximum") test.intersect<-mmmmax.test.simple(x=xx,L=L.temp,r=r.temp,alternative=alternative,approximation=approximation,df2=df2)
-					if(type=="quadratic") test.intersect<-mmmchisq.test.simple(x=xx,L=L.temp,r=r.temp,approximation=approximation,df2=df2)
+					if(type=="maximum") test.intersect<-mmmmax.test.simple(x=xx,L=L.temp,r=r.temp,alternative=alternative,approximation=approximation,df2=df2,...)
+					if(type=="quadratic") test.intersect<-mmmchisq.test.simple(x=xx,L=L.temp,r=r.temp,approximation=approximation,df2=df2,showwarning=FALSE)
 				}
 
 				#test.intersect<-test.fun(x)
@@ -333,6 +352,7 @@ mmmgee.test<-function(x,L=NULL,r=NULL,statistic=c("wald","score"),type=c("maximu
 
 # @title Print Results From mmmgeetest Objects
 # @export
+#df was removed in the maximum score test output. (With the Wald test it was not displayed before.)
 print.mmmgeetest<-function(x,...) {
 	cat(paste("\n\t","Hypothesis tests for linear contrasts in multiple marginal GEE models\n\n"))
 	cat(paste("Statistic:",ifelse(x$test$type=="maximum","Maximum-type","Quadratic form"),x$test$statistic,"statistic\n"))
@@ -340,19 +360,19 @@ print.mmmgeetest<-function(x,...) {
 	cat(paste("Alternative:",c("Undirected","Less","Greater")[x$test$alternative==c("undirected","less","greater")],"\n\nGlobal test:\n"))
 
 	if(x$test$statistic=="Wald" & x$test$type=="quadratic") {
-		if(x$test$approximation=="Chisq") cat(paste("Chi-squared = ",format(x$test$global[,1],digits=4),", df = ",x$test$global$df,", p-value = ",format(x$test$global$p,digits=4),sep=""))
-		if(x$test$approximation=="F") cat(paste("F = ",format(x$test$global[,1],digits=4),", df1 = ",x$test$global$df1,", df2 = ",round(x$test$global$df2,1),", p-value = ",format(x$test$global$p,digits=4),sep=""))
-		if(x$test$approximation=="scaled.F") cat(paste("Scaled F = ",format(x$test$global[,1],digits=4),", df1 = ",x$test$global$df1,", df2-df1+1 = ",round(x$test$global$df2F,1),", p-value = ",format(x$test$global$p,digits=4),sep=""))
+		if(x$test$approximation=="Chisq") cat(paste("Chi-squared = ",format(x$test$global[,1],digits=4),", df = ",x$test$global$df,", p-value = ",format(x$test$global$p,digits=4,nsmall=4),sep=""))
+		if(x$test$approximation=="F") cat(paste("F = ",format(x$test$global[,1],digits=4),", df1 = ",x$test$global$df1,", df2 = ",round(x$test$global$df2,1),", p-value = ",format(x$test$global$p,digits=4,nsmall=4),sep=""))
+		if(x$test$approximation=="scaled.F") cat(paste("Scaled F = ",format(x$test$global[,1],digits=4),", df1 = ",x$test$global$df1,", df2-df1+1 = ",round(x$test$global$df2F,1),", p-value = ",format(x$test$global$p,digits=4,nsmall=4),sep=""))
 	}	
 	if(x$test$statistic=="Wald" & x$test$type=="maximum") {
-		if(x$test$approximation=="normal") cat(paste(names(x$test$global)[1]," = ",format(x$test$global[,1],digits=4),", p-value = ",format(x$test$global$p,digits=4),sep=""))
-		if(x$test$approximation=="t") cat(paste(names(x$test$global)[1]," = ",format(x$test$global[,1],digits=4),", df = ",x$test$global$df2,", p-value = ",format(x$test$global$p,digits=4),sep=""))
+		if(x$test$approximation=="normal") cat(paste(names(x$test$global)[1]," = ",format(x$test$global[,1],digits=4),", p-value = ",format(x$test$global$p,digits=4,nsmall=4),sep=""))
+		if(x$test$approximation=="t") cat(paste(names(x$test$global)[1]," = ",format(x$test$global[,1],digits=4),", df = ",x$test$global$df2,", p-value = ",format(x$test$global$p,digits=4,nsmall=4),sep=""))
 	}
 	if(x$test$statistic=="Score" & x$test$type=="quadratic") {		
-		cat(paste("Chi-squared = ",format(x$test$global[,1],digits=4),", df = ",x$test$global$df,", p-value = ",format(x$test$global$p,digits=4),sep=""))
+		cat(paste("Chi-squared = ",format(x$test$global[,1],digits=4),", df = ",x$test$global$df,", p-value = ",format(x$test$global$p,digits=4,nsmall=4),sep=""))
 	}
 	if(x$test$statistic=="Score" & x$test$type=="maximum") {		
-		cat(paste(names(x$test$global)[1]," = ",format(x$test$global[,1],digits=4),", df = ",x$test$global$df,", p-value = ",format(x$test$global$p,digits=4),sep=""))
+		cat(paste(names(x$test$global)[1]," = ",format(x$test$global[,1],digits=4), ", p-value = ",format(x$test$global$p,digits=4,nsmall=4),sep=""))
 	}
 
 	cat("\n\n")

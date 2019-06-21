@@ -4,7 +4,7 @@ export(mmmgee.test)
 import(mvtnorm)
 import(Matrix)
 importFrom("methods", "as")
-importFrom("stats", "family", "gaussian", "median", 
+importFrom("stats", "as.formula", "family", "gaussian", "median", 
 		"model.frame", "model.matrix", "model.offset",
 		"model.response", "na.pass", "pnorm", "terms",
 		"coef", "lm", "pchisq", "pf")
@@ -14,5 +14,8 @@ S3method(fitted,geem2)
 S3method(print,summary.geem2)
 S3method(predict,geem2)
 S3method(coef,geem2)
+S3method(vcov,geem2)
 S3method(family,geem2)
 S3method(print,mmmgeetest)
+S3method(coef,mmmgee)
+S3method(vcov,mmmgee)

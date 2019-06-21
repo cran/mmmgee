@@ -1,7 +1,7 @@
 Package: mmmgee
 Title: Simultaneous Inference for Multiple Linear Contrasts in GEE
         Models
-Version: 1.13
+Version: 1.20
 Authors@R: c(person("Robin", "Ristl", email = "robin.ristl@meduniwien.ac.at", role = c("aut", "cre")),
 		person("Lee", "McDaniel", role = "ctb",comment="Author of 'geeM' package"),
 			person("Nick", "Henderson", role = "ctb",comment="Author of 'geeM' package"),
@@ -10,7 +10,7 @@ Imports: stats, methods, Matrix, mvtnorm
 Suggests: geepack, testthat
 Description: Provides global hypothesis tests, multiple testing procedures and simultaneous confidence intervals for multiple linear contrasts of regression
 	coefficients in a single generalized estimating equation (GEE) model or across multiple GEE models. GEE models are fit by a modified version of the 'geeM' package.
-Date: 2018-10-29
+Date: 2019-06-18
 Author: Robin Ristl [aut, cre],
   Lee McDaniel [ctb] (Author of 'geeM' package),
   Nick Henderson [ctb] (Author of 'geeM' package),
@@ -22,6 +22,6 @@ Encoding: UTF-8
 LazyData: true
 RoxygenNote: 6.1.0
 NeedsCompilation: no
-Packaged: 2018-10-29 13:07:01 UTC; Robin
+Packaged: 2019-06-21 13:36:22 UTC; Robin
 Repository: CRAN
-Date/Publication: 2018-10-29 13:50:04 UTC
+Date/Publication: 2019-06-21 15:30:03 UTC
